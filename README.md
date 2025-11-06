@@ -35,9 +35,19 @@ Added checks to USB-storage mounting an disk-usage
 
 # Examples:
 ```
-  ./check_snmp_synology -u admin -p 1234 -h nas.intranet 
-  ./check_snmp_synology -u admin -p 1234 -h nas.intranet -v 
-  ./check_snmp_synology -2 public -h nas.intranet 
+  ./check_snmp_synology -u admin -p 1234 -h nas.intranet
+  ./check_snmp_synology -u admin -p 1234 -h nas.intranet -v
+  ./check_snmp_synology -u admin -p 12345678 -l authPriv -a SHA -x AES -P 87654321 -h nas.intranet
+  ./check_snmp_synology -2 public -h nas.intranet
   ./check_snmp_synology -2 public -h nas.intranet -b 2
-  ./check_snmp_synology -2 public -h nas.intranet:10161 
+  ./check_snmp_synology -2 public -h nas.intranet:10161
+```
+
+# Nagios service example
+```
+define service{
+  host_name            synology-nas
+  service_description  Synology Status
+  check_command        check_snmp_synology!-u admin -p 12345678 -l authPriv -a SHA -x AES -P 87654321 -h nas.intranet -b 2 -U
+}
 ```
