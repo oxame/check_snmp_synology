@@ -32,6 +32,10 @@ SNMPGET=$(which snmpget)
 SNMPVersion="3"
 SNMPV2Community="public"
 SNMPTimeout="10"
+SNMPSecurityLevel="authNoPriv"
+SNMPAuthProtocol="MD5"
+SNMPPrivProtocol="AES"
+SNMPPrivPassword=""
 warningTemperature="50"
 criticalTemperature="60"
 warningStorage="80"
@@ -108,6 +112,10 @@ usage()
 	echo "options:"
 	echo "            -u [snmp username]   	Username for SNMPv3"
 	echo "            -p [snmp password]   	Password for SNMPv3"
+	echo "            -l [security level]        SNMPv3 security level (noAuthNoPriv, authNoPriv, authPriv) (default $SNMPSecurityLevel)"
+	echo "            -a [auth protocol]        SNMPv3 authentication protocol (MD5 or SHA) (default $SNMPAuthProtocol)"
+	echo "            -x [privacy protocol]     SNMPv3 privacy protocol (DES or AES) (default $SNMPPrivProtocol)"
+	echo "            -P [privacy password]    SNMPv3 privacy password (required with authPriv)"
 	echo ""
 	echo "            -2 [community name]	  	Use SNMPv2 (no need user/password) & define community name (ex: public)"
 	echo ""
@@ -137,10 +145,14 @@ if [ "$1" == "--help" ]; then
 	usage; exit 0
 fi
 
-while getopts 2:W:C:w:c:u:p:h:b:iUv OPTNAME; do
+while getopts 2:W:C:w:c:u:p:l:a:x:P:h:b:iUv OPTNAME; do
 	case "$OPTNAME" in
 		u)	SNMPUser="$OPTARG";;
 		p)	SNMPPassword="$OPTARG";;
+		l)	SNMPSecurityLevel="$OPTARG";;
+		a)	SNMPAuthProtocol="$OPTARG";;
+		x)	SNMPPrivProtocol="$OPTARG";;
+		P)	SNMPPrivPassword="$OPTARG";;
 		h)	hostname="$OPTARG";;
 		v)	verbose="yes";;
 		2)	SNMPVersion="2"
@@ -190,17 +202,64 @@ function checkDiskSpace () {
 	fi
 }
 
-if [ "$hostname" = "" ] || ([ "$SNMPVersion" = "3" ] && [ "$SNMPUser" = "" ]) || ([ "$SNMPVersion" = "3" ] && [ "$SNMPPassword" = "" ]) ; then
+if [ "$hostname" = "" ] ||
+   ([ "$SNMPVersion" = "3" ] && [ "$SNMPUser" = "" ]) ||
+   ([ "$SNMPVersion" = "3" ] && [ "$SNMPSecurityLevel" != "noAuthNoPriv" ] && [ "$SNMPPassword" = "" ]) ||
+   ([ "$SNMPVersion" = "3" ] && [ "$SNMPSecurityLevel" = "authPriv" ] && [ "$SNMPPrivPassword" = "" ]) ; then
 	usage
 else
 	if [ "$SNMPVersion" = "2" ] ; then
 		SNMPArgs=" -OQne -v 2c -c $SNMPV2Community -t $SNMPTimeout"
 	else
-		SNMPArgs=" -OQne -v 3 -u $SNMPUser -A $SNMPPassword -l authNoPriv -a MD5 -t $SNMPTimeout"
-		if [ ${#SNMPPassword} -lt "8" ] ; then
-			echo "snmpwalk:  (The supplied password is too short.)"
-			exit 1
-		fi
+		SNMPSecurityLevel=$(echo "$SNMPSecurityLevel" | tr '[:upper:]' '[:lower:]')
+		SNMPAuthProtocol=$(echo "$SNMPAuthProtocol" | tr '[:lower:]' '[:upper:]')
+		SNMPPrivProtocol=$(echo "$SNMPPrivProtocol" | tr '[:lower:]' '[:upper:]')
+
+		case "$SNMPSecurityLevel" in
+		        "noauthnopriv")
+		                SNMPArgs=" -OQne -v 3 -u $SNMPUser -l noAuthNoPriv -t $SNMPTimeout"
+		                ;;
+		        "authnopriv")
+		                if [ ${#SNMPPassword} -lt "8" ] ; then
+		                        echo "snmpwalk:  (The supplied password is too short.)"
+		                        exit 1
+		                fi
+
+		                if [ "$SNMPAuthProtocol" != "MD5" ] && [ "$SNMPAuthProtocol" != "SHA" ] ; then
+		                        echo "Unsupported SNMP authentication protocol: $SNMPAuthProtocol"
+		                        exit 1
+		                fi
+
+		                SNMPArgs=" -OQne -v 3 -u $SNMPUser -l authNoPriv -a $SNMPAuthProtocol -A $SNMPPassword -t $SNMPTimeout"
+		                ;;
+		        "authpriv")
+		                if [ ${#SNMPPassword} -lt "8" ] ; then
+		                        echo "snmpwalk:  (The supplied password is too short.)"
+		                        exit 1
+		                fi
+
+		                if [ ${#SNMPPrivPassword} -lt "8" ] ; then
+		                        echo "snmpwalk:  (The supplied privacy password is too short.)"
+		                        exit 1
+		                fi
+
+		                if [ "$SNMPAuthProtocol" != "MD5" ] && [ "$SNMPAuthProtocol" != "SHA" ] ; then
+		                        echo "Unsupported SNMP authentication protocol: $SNMPAuthProtocol"
+		                        exit 1
+		                fi
+
+		                if [ "$SNMPPrivProtocol" != "DES" ] && [ "$SNMPPrivProtocol" != "AES" ] ; then
+		                        echo "Unsupported SNMP privacy protocol: $SNMPPrivProtocol"
+		                        exit 1
+		                fi
+
+		                SNMPArgs=" -OQne -v 3 -u $SNMPUser -l authPriv -a $SNMPAuthProtocol -A $SNMPPassword -x $SNMPPrivProtocol -X $SNMPPrivPassword -t $SNMPTimeout"
+		                ;;
+		        *)
+		                echo "Unsupported SNMP security level: $SNMPSecurityLevel"
+		                exit 1
+		                ;;
+		esac
 	fi
 
 	nbDisk=`$SNMPWALK $SNMPArgs $hostname $OID_diskID 2> /dev/null | wc -l `
