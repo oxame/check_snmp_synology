@@ -344,20 +344,24 @@ else
 		healthString="$healthString, System status: $systemStatus "
 	fi
 
-	#Check system temperature
-	if [ "$temperature" -gt "$warningTemperature" ] ; then
-		if [ "$temperature" -gt "$criticalTemperature" ] ; then
-			temperature="$temperature (CRITICAL)"
-			healthCriticalStatus=1
-			healthString="$healthString, temperature: $temperature "
-		else
-			temperature="$temperature (WARNING)"
-			healthWarningStatus=1
-			healthString="$healthString, temperature: $temperature "
-		fi
-	else
-		temperature="$temperature (Normal)"
-	fi
+        #Check system temperature
+        if [[ "$temperature" =~ ^-?[0-9]+$ ]] && [[ "$warningTemperature" =~ ^-?[0-9]+$ ]] && [[ "$criticalTemperature" =~ ^-?[0-9]+$ ]]; then
+                if (( temperature > warningTemperature )); then
+                        if (( temperature > criticalTemperature )); then
+                                temperature="$temperature (CRITICAL)"
+                                healthCriticalStatus=1
+                                healthString="$healthString, temperature: $temperature "
+                        else
+                                temperature="$temperature (WARNING)"
+                                healthWarningStatus=1
+                                healthString="$healthString, temperature: $temperature "
+                        fi
+                else
+                        temperature="$temperature (Normal)"
+                fi
+        else
+                temperature="${temperature:-Unknown} (Unavailable)"
+        fi
 
 	#Check power status
 	if [ "$powerStatus" = "1" ] ; then
@@ -462,17 +466,21 @@ else
 			"5")	diskStatus[$i]="Crashed";		healthCriticalStatus=1;	healthString="$healthString, problem with ${diskID[$i]} (model:${diskModel[$i]}) status:${diskStatus[$i]} temperature:${diskTemp[$i]}";;
 		esac
 
-		if [ "${diskTemp[$i]}" -gt "$warningTemperature" ] ; then
-			if [ "${diskTemp[$i]}" -gt "$criticalTemperature" ] ; then
-				diskTemp[$i]="${diskTemp[$i]} (CRITICAL)"
-				healthCriticalStatus=1;
-				healthString="$healthString, ${diskID[$i]} temperature: ${diskTemp[$i]}"
-			else
-				diskTemp[$i]="${diskTemp[$i]} (WARNING)"
-				healthWarningStatus=1;
-				healthString="$healthString, ${diskID[$i]} temperature: ${diskTemp[$i]}"
-			fi
-		fi
+                if [[ "${diskTemp[$i]}" =~ ^-?[0-9]+$ ]] && [[ "$warningTemperature" =~ ^-?[0-9]+$ ]] && [[ "$criticalTemperature" =~ ^-?[0-9]+$ ]]; then
+                        if (( ${diskTemp[$i]} > warningTemperature )); then
+                                if (( ${diskTemp[$i]} > criticalTemperature )); then
+                                        diskTemp[$i]="${diskTemp[$i]} (CRITICAL)"
+                                        healthCriticalStatus=1;
+                                        healthString="$healthString, ${diskID[$i]} temperature: ${diskTemp[$i]}"
+                                else
+                                        diskTemp[$i]="${diskTemp[$i]} (WARNING)"
+                                        healthWarningStatus=1;
+                                        healthString="$healthString, ${diskID[$i]} temperature: ${diskTemp[$i]}"
+                                fi
+                        fi
+                else
+                        diskTemp[$i]="${diskTemp[$i]:-Unknown} (Unavailable)"
+                fi
 
 	done  
 
